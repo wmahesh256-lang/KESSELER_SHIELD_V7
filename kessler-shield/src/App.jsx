@@ -1,15 +1,217 @@
-import React, { useEffect, useState, useMemo, Suspense } from 'react';
+ import React, { useEffect, useState, useMemo, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as satellite from 'satellite.js';
 import Globe from './Globe';
 
+const OPERATOR_GROUPS = {
+  'CMS': 'ISRO',
+  'GSAT': 'ISRO',
+  'INSAT': 'ISRO',
+  'IRNSS': 'ISRO',
+  'MICROSAT': 'ISRO',
+  'CARTOSAT': 'ISRO',
+  'REESAT': 'ISRO',
+  'OCEANSAT': 'ISRO',
+  'RESOURCESAT': 'ISRO',
+  'FLOCK': 'PLANET_LABS',
+  'SKYSAT': 'PLANET_LABS',
+  'LEMUR': 'SPIRE',
+  'STARLINK': 'SPACEX',
+  'ONEWEB': 'ONEWEB',
+  'ISS': 'ISS_STATION',
+  'POISK': 'ISS_STATION',
+  'ZARYA': 'ISS_STATION',
+  'ZVEZDA': 'ISS_STATION',
+  'NAUKA': 'ISS_STATION',
+  'SOYUZ': 'ISS_STATION',
+  'PROGRESS': 'ISS_STATION',
+  'DRAGON': 'ISS_STATION',
+  'CYGNUS': 'ISS_STATION',
+  'CSS': 'TIANGONG_STATION',
+  'TIANHE': 'TIANGONG_STATION',
+  'WENTIAN': 'TIANGONG_STATION',
+  'MENGTIAN': 'TIANGONG_STATION',
+  'SHENZHOU': 'TIANGONG_STATION',
+  'TIANZHOU': 'TIANGONG_STATION',
+  'AQUA': 'A_TRAIN',
+  'AURA': 'A_TRAIN',
+  'CLOUDSAT': 'A_TRAIN',
+  'CALIPSO': 'A_TRAIN',
+  'OCO': 'A_TRAIN',
+  'GCOM': 'A_TRAIN',
+  'TERRASAR': 'DLR_TWIN_MISSION',
+  'TANDEM': 'DLR_TWIN_MISSION',
+  'NAVSTAR': 'US_GPS',
+  'GALILEO': 'EU_GALILEO',
+  'BEIDOU': 'CN_BEIDOU',
+  'COSMOS': 'RU_GLONASS'
+};
+
+// ---------------------------------------------------------
+// Global Threat Radar (Stochastic Background Sweep)
+// ---------------------------------------------------------
+function GlobalThreatRadar({ catalog }) {
+  const [criticalThreats, setCriticalThreats] = useState([]);
+  const [constellationTraffic, setConstellationTraffic] = useState([]);
+
+  useEffect(() => {
+    if (!catalog || catalog.length === 0) return;
+
+    const scanInterval = setInterval(() => {
+      const now = new Date();
+      const threats = [];
+      const traffic = [];
+      const sample = [];
+      const seenNames = new Set(); 
+      let attempts = 0;
+      
+      while (sample.length < 500 && attempts < 2000) {
+        attempts++;
+        const sat = catalog[Math.floor(Math.random() * catalog.length)];
+        
+        if (!sat || seenNames.has(sat.name)) continue; 
+        
+        try {
+          const rec = satellite.twoline2satrec(sat.tle1, sat.tle2);
+          const pos = satellite.propagate(rec, now).position;
+          if (pos) {
+            sample.push({ 
+              name: sat.name, 
+              pos, 
+              isDebris: sat.name.includes('DEB') 
+            });
+            seenNames.add(sat.name); 
+          }
+        } catch(e) {}
+      }
+
+      for (let i = 0; i < sample.length; i++) {
+        for (let j = i + 1; j < sample.length; j++) {
+          
+          if (sample[i].name === sample[j].name) continue;
+
+          let base1 = sample[i].name.split('-')[0].split(' ')[0];
+          let base2 = sample[j].name.split('-')[0].split(' ')[0];
+          
+          base1 = OPERATOR_GROUPS[base1] || base1;
+          base2 = OPERATOR_GROUPS[base2] || base2;
+
+          const isSameConstellation = (!sample[i].isDebris && !sample[j].isDebris && base1 === base2);
+          const isKesslerEvent = (sample[i].isDebris || sample[j].isDebris);
+
+          const dist = Math.hypot(
+            sample[i].pos.x - sample[j].pos.x,
+            sample[i].pos.y - sample[j].pos.y,
+            sample[i].pos.z - sample[j].pos.z
+          );
+          
+          if (dist < 50) {
+            const record = {
+              obj1: sample[i].name,
+              obj2: sample[j].name,
+              dist: dist.toFixed(2),
+              isKesslerEvent: isKesslerEvent
+            };
+            
+            if (isSameConstellation) {
+              traffic.push(record);
+            } else {
+              threats.push(record);
+            }
+          }
+        }
+      }
+
+      threats.sort((a, b) => a.dist - b.dist);
+      traffic.sort((a, b) => a.dist - b.dist);
+      
+      if (threats.length > 0) setCriticalThreats(threats.slice(0, 2));
+      if (traffic.length > 0) setConstellationTraffic(traffic.slice(0, 2));
+      
+    }, 3000);
+
+    return () => clearInterval(scanInterval);
+  }, [catalog]);
+
+  return (
+    <div className="bg-black/50 p-3 rounded border border-gray-800 mt-4 relative overflow-hidden space-y-4">
+      <div>
+        <div className="flex justify-between items-center mb-2 border-b border-[#FF3366]/30 pb-1">
+          <h2 className="text-[10px] font-bold text-[#FF3366] tracking-widest flex items-center gap-2">
+            <div className="w-2 h-2 bg-[#FF3366] rounded-full animate-ping"></div>
+            CRITICAL COLLISION RISK
+          </h2>
+          <span className="text-[8px] text-[#FF3366]">&lt; 50km</span>
+        </div>
+
+        {criticalThreats.length === 0 ? (
+          <div className="text-[10px] text-gray-600 text-center py-2 italic">No uncoordinated anomalies detected.</div>
+        ) : (
+          <div className="space-y-1">
+            {criticalThreats.map((t, i) => (
+              <div key={i} className={`p-1.5 rounded border flex flex-col gap-1 ${t.isKesslerEvent ? 'bg-[#FF8800]/20 border-[#FF8800]/50' : 'bg-[#FF3366]/10 border-[#FF3366]/30'}`}>
+                
+                {t.isKesslerEvent && (
+                  <div className="text-[8px] font-bold text-black bg-[#FF8800] text-center uppercase tracking-widest rounded-sm mb-1 animate-pulse">
+                    ⚠️ KESSLER DEBRIS EVENT
+                  </div>
+                )}
+                
+                <div className={`flex justify-between items-center text-[9px] ${t.isKesslerEvent ? 'text-[#FF8800]' : 'text-gray-300'}`}>
+                  <span className="truncate w-1/2">{t.obj1}</span>
+                  <span className="font-bold px-1 text-[10px]">⚔️</span>
+                  <span className="truncate w-1/2 text-right">{t.obj2}</span>
+                </div>
+                <div className={`text-center text-[9px] font-mono border-t pt-1 ${t.isKesslerEvent ? 'text-[#FF8800] border-[#FF8800]/30' : 'text-[#FF3366] border-[#FF3366]/20'}`}>
+                  CPA: {t.dist} km
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="flex justify-between items-center mb-2 border-b border-[#00FFCC]/30 pb-1">
+          <h2 className="text-[10px] font-bold text-[#00FFCC] tracking-widest flex items-center gap-2">
+            <div className="w-2 h-2 bg-[#00FFCC] rounded-full"></div>
+            CONSTELLATION TRAFFIC
+          </h2>
+          <span className="text-[8px] text-[#00FFCC]">INTENTIONAL FORMATION</span>
+        </div>
+
+        {constellationTraffic.length === 0 ? (
+          <div className="text-[10px] text-gray-600 text-center py-2 italic">Scanning network clusters...</div>
+        ) : (
+          <div className="space-y-1">
+            {constellationTraffic.map((t, i) => (
+              <div key={i} className="bg-[#00FFCC]/10 p-1.5 rounded border border-[#00FFCC]/30 flex flex-col gap-1">
+                <div className="flex justify-between items-center text-[9px] text-gray-400">
+                  <span className="truncate w-1/2">{t.obj1}</span>
+                  <span className="text-[#00FFCC] font-bold px-1 text-[10px]">🔗</span>
+                  <span className="truncate w-1/2 text-right">{t.obj2}</span>
+                </div>
+                <div className="text-center text-[#00FFCC] text-[9px] font-mono border-t border-[#00FFCC]/20 pt-1">
+                  SEPARATION: {t.dist} km
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------
+// LiveTelemetry: Target Analytics
+// ---------------------------------------------------------
 function LiveTelemetry({ sat, isTracking, setTrackingMode }) {
   const [metrics, setMetrics] = useState({ alt: '0', vel: '0', lat: '0', lng: '0' });
   const [riskAssessment, setRiskAssessment] = useState({ level: 'CALCULATING', color: 'text-gray-500', msg: '' });
 
-  // Parse static Keplerian elements
   const satrec = useMemo(() => satellite.twoline2satrec(sat.tle1, sat.tle2), [sat]);
   const inclination = (satrec.inclo * (180 / Math.PI)).toFixed(2);
   const eccentricity = satrec.ecco.toFixed(5);
@@ -56,9 +258,9 @@ function LiveTelemetry({ sat, isTracking, setTrackingMode }) {
       </div>
 
       <div className="bg-black p-3 rounded border border-gray-800">
-        <label className="text-[10px] text-gray-500 block mb-2 border-b border-gray-800 pb-1">CONJUNCTION RISK</label>
+        <label className="text-[10px] text-gray-500 block mb-2 border-b border-gray-800 pb-1">ORBITAL THREAT LEVEL</label>
         <div className="py-1">
-          <p className="text-xs text-gray-300">THREAT LEVEL: <span className={`font-bold ${riskAssessment.color}`}>{riskAssessment.level}</span></p>
+          <p className="text-xs text-gray-300">STATUS: <span className={`font-bold ${riskAssessment.color}`}>{riskAssessment.level}</span></p>
           <p className="text-[9px] text-gray-500 mt-1">{riskAssessment.msg}</p>
         </div>
         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-800">
@@ -122,9 +324,13 @@ function LiveTelemetry({ sat, isTracking, setTrackingMode }) {
   );
 }
 
+// ---------------------------------------------------------
+// App Layout
+// ---------------------------------------------------------
 export default function App() {
   const [catalog, setCatalog] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [activeSearch, setActiveSearch] = useState('');
   const [selectedSat, setSelectedSat] = useState(null);
   const [trackingMode, setTrackingMode] = useState(false);
   const [hoveredSatName, setHoveredSatName] = useState(null);
@@ -138,9 +344,19 @@ export default function App() {
       .catch(err => console.error("API offline", err));
   }, [catalogLimit]);
 
-  const filteredCatalog = catalog.filter(sat => 
-    sat.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setActiveSearch(searchInput);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // CRITICAL MEMORY FIX: Memoize the filtered array to prevent infinite re-renders on mouse hover
+  const filteredCatalog = useMemo(() => {
+    return catalog.filter(sat => 
+      sat.name.toLowerCase().includes(activeSearch.toLowerCase())
+    );
+  }, [catalog, activeSearch]);
 
   const handleSelectSatellite = (sat) => {
     setSelectedSat(sat);
@@ -242,8 +458,8 @@ export default function App() {
             type="text" 
             placeholder="Search catalog (e.g., STARLINK)..." 
             className="w-full bg-black/60 border border-gray-800 text-[#00FFCC] text-sm px-4 py-2 rounded focus:outline-none focus:border-[#00FFCC]"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
           />
         </div>
       </div>
@@ -271,6 +487,8 @@ export default function App() {
             </div>
           )}
         </div>
+
+        <GlobalThreatRadar catalog={catalog} />
 
         <div>
           <h2 className="text-sm font-bold text-gray-400 border-b border-gray-700 pb-2 mb-3 mt-4">SHELL-BASED KESSLER PREDICTOR</h2>

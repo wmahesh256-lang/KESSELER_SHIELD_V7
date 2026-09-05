@@ -1,178 +1,186 @@
 // src/Globe.jsx
-import React, { useRef, useMemo, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import * as satellite from 'satellite.js';
-import { useTexture } from '@react-three/drei';
+import { Sphere, useTexture } from '@react-three/drei';
 
-const EARTH_RADIUS = 6371;
-const SCALE_FACTOR = 0.001;
+const EARTH_RADIUS = 10;
+const SCALE_FACTOR = EARTH_RADIUS / 6371; 
 
-export default function Globe({ 
-  tleData, 
-  onSelectSatellite, 
-  trackingMode, 
-  setHoveredSatName, 
+export default function Globe({
+  tleData,
+  onSelectSatellite,
+  trackingMode,
+  setHoveredSatName,
   setTooltipPos,
   selectedSat
 }) {
   const meshRef = useRef();
   const earthRef = useRef();
-  const reticleRef = useRef();
+  const targetRingRef = useRef(); 
+  const [satRecs, setSatRecs] = useState([]);
   
-  // Track frames for Time Slicing optimization
-  const frameCount = useRef(0);
-  
-  const dummy = useMemo(() => new THREE.Object3D(), []);
-  const tempColor = useMemo(() => new THREE.Color(), []);
-  const matrix = useMemo(() => new THREE.Matrix4(), []);
-  
-  const desiredCamPos = useMemo(() => new THREE.Vector3(), []);
-  const desiredLookAt = useMemo(() => new THREE.Vector3(), []);
-  
-  const { camera, raycaster, mouse, size } = useThree();
+  const { camera } = useThree();
   const earthTexture = useTexture('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg');
 
-  const { satrecs, colors } = useMemo(() => {
-    const recs = [];
-    const colorArray = new Float32Array(tleData.length * 3);
-    const now = new Date();
-
-    tleData.forEach((sat, i) => {
-      const satrec = satellite.twoline2satrec(sat.tle1, sat.tle2);
-      recs.push(satrec);
-
-      try {
-        const positionAndVelocity = satellite.propagate(satrec, now);
-        const gmst = satellite.gstime(now);
-        const geodetic = satellite.eciToGeodetic(positionAndVelocity.position, gmst);
-        const alt = geodetic.height;
-
-        if (alt < 2000) tempColor.set('#00FFCC');       
-        else if (alt < 35000) tempColor.set('#FFB300'); 
-        else tempColor.set('#FF3366');                  
-      } catch (e) {
-        tempColor.set('#FFFFFF');
-      }
-      tempColor.toArray(colorArray, i * 3);
-    });
-    return { satrecs: recs, colors: colorArray };
-  }, [tleData, tempColor]);
+  const tempObject = new THREE.Object3D();
+  const tempColor = new THREE.Color();
+  const targetVec = new THREE.Vector3();
 
   useEffect(() => {
-    if (meshRef.current) {
-      meshRef.current.geometry.setAttribute('color', new THREE.InstancedBufferAttribute(colors, 3));
+    if (!meshRef.current || !tleData || tleData.length === 0) return;
+
+    // CRITICAL FIX: Override the hidden Raycaster hitbox to wrap the entire orbital system
+    if (meshRef.current.geometry) {
+      meshRef.current.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 100);
     }
-  }, [colors]);
 
-  useFrame(() => {
-    if (!meshRef.current || satrecs.length === 0) return;
+    const recs = [];
+    tleData.forEach((sat, i) => {
+      try {
+        const rec = satellite.twoline2satrec(sat.tle1, sat.tle2);
+        recs.push({ sat, rec, index: i });
+        
+        const revsPerDay = rec.no * (1440 / (2 * Math.PI));
+
+        if (sat.name.includes('DEB')) {
+          tempColor.set('#FF8800'); 
+        } else if (revsPerDay >= 11.25) {
+          tempColor.set('#00FFCC'); 
+        } else if (revsPerDay > 1.5) {
+          tempColor.set('#B366FF'); 
+        } else {
+          tempColor.set('#FFFFAA'); 
+        }
+        
+        meshRef.current.setColorAt(i, tempColor);
+      } catch (e) {}
+    });
+
+    meshRef.current.instanceColor.needsUpdate = true;
+    setSatRecs(recs);
+  }, [tleData]);
+
+  useFrame(({ clock }) => {
+    if (!meshRef.current || satRecs.length === 0) return;
+
     const now = new Date();
+    const frameId = Math.floor(clock.getElapsedTime() * 60) % 4;
     
-    earthRef.current.rotation.y += 0.0005;
+    // 1. Time-Sliced Background Swarm
+    for (let i = frameId; i < satRecs.length; i += 4) {
+      const { rec, index } = satRecs[i];
+      try {
+        const posVel = satellite.propagate(rec, now);
+        if (posVel.position) {
+          const x = posVel.position.x * SCALE_FACTOR;
+          const y = posVel.position.y * SCALE_FACTOR;
+          const z = posVel.position.z * SCALE_FACTOR;
+          
+          tempObject.position.set(x, z, -y);
+          tempObject.scale.set(1, 1, 1); 
+          tempObject.updateMatrix();
+          
+          meshRef.current.setMatrixAt(index, tempObject.matrix);
+        }
+      } catch (e) {}
+    }
 
-    // ---------------------------------------------------------
-    // OPTIMIZATION: Time Slicing (Split updates across 4 frames)
-    // ---------------------------------------------------------
-    const CHUNKS = 4;
-    const chunkSize = Math.ceil(satrecs.length / CHUNKS);
-    const startIdx = (frameCount.current % CHUNKS) * chunkSize;
-    const endIdx = Math.min(startIdx + chunkSize, satrecs.length);
-
-    for (let i = startIdx; i < endIdx; i++) {
-      const satrec = satrecs[i];
-      const positionAndVelocity = satellite.propagate(satrec, now);
-      const positionEci = positionAndVelocity.position;
-      
-      if (positionEci) {
-        dummy.position.set(
-          positionEci.x * SCALE_FACTOR,
-          positionEci.z * SCALE_FACTOR,
-          -positionEci.y * SCALE_FACTOR
-        );
-        dummy.updateMatrix();
-        meshRef.current.setMatrixAt(i, dummy.matrix);
+    // 2. Continuous 60 FPS Target Lock
+    if (selectedSat) {
+      const target = satRecs.find(r => r.sat.name === selectedSat.name);
+      if (target) {
+        try {
+          const posVel = satellite.propagate(target.rec, now);
+          if (posVel.position) {
+            const x = posVel.position.x * SCALE_FACTOR;
+            const y = posVel.position.y * SCALE_FACTOR;
+            const z = posVel.position.z * SCALE_FACTOR;
+            
+            targetVec.set(x, z, -y);
+            
+            tempObject.position.set(x, z, -y);
+            tempObject.scale.set(1, 1, 1);
+            tempObject.updateMatrix();
+            meshRef.current.setMatrixAt(target.index, tempObject.matrix);
+            
+            if (targetRingRef.current) {
+              targetRingRef.current.position.copy(targetVec);
+              targetRingRef.current.rotation.x -= 0.02;
+              targetRingRef.current.rotation.y += 0.02;
+              targetRingRef.current.visible = true;
+            }
+            
+            if (trackingMode) {
+              camera.position.lerp(targetVec.clone().multiplyScalar(1.6), 0.08);
+              camera.lookAt(0, 0, 0);
+            }
+          }
+        } catch (e) {}
       }
+    } else {
+      if (targetRingRef.current) targetRingRef.current.visible = false;
     }
     
     meshRef.current.instanceMatrix.needsUpdate = true;
-    frameCount.current += 1;
 
-    // ---------------------------------------------------------
-    // Target Reticle & Auto-Pilot
-    // ---------------------------------------------------------
-    if (selectedSat && reticleRef.current) {
-      const targetSatrec = satellite.twoline2satrec(selectedSat.tle1, selectedSat.tle2);
-      const targetPos = satellite.propagate(targetSatrec, now).position;
-      
-      if (targetPos) {
-        reticleRef.current.position.set(
-          targetPos.x * SCALE_FACTOR,
-          targetPos.z * SCALE_FACTOR,
-          -targetPos.y * SCALE_FACTOR
-        );
-        reticleRef.current.rotation.z += 0.02;
-        reticleRef.current.rotation.x += 0.01;
-        reticleRef.current.visible = true;
-
-        if (trackingMode) {
-          desiredLookAt.copy(reticleRef.current.position);
-          const viewOffset = new THREE.Vector3(2, 1, 2);
-          desiredCamPos.set(
-            desiredLookAt.x + viewOffset.x, 
-            desiredLookAt.y + viewOffset.y, 
-            desiredLookAt.z + viewOffset.z
-          );
-          camera.position.lerp(desiredCamPos, 0.05);
-          camera.lookAt(desiredLookAt);
-        }
-      }
-    } else if (reticleRef.current) {
-      reticleRef.current.visible = false;
-    }
-
-    // Raycasting for Hover Tooltip
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObject(meshRef.current);
-
-    if (intersects.length > 0) {
-      const instanceId = intersects[0].instanceId;
-      const hoveredSat = tleData[instanceId];
-      const mouseX = (mouse.x + 1) / 2 * size.width;
-      const mouseY = (-mouse.y + 1) / 2 * size.height;
-      
-      setHoveredSatName(hoveredSat.name);
-      setTooltipPos({ x: mouseX, y: mouseY });
-    } else {
-      setHoveredSatName(null);
+    // 3. Independent Earth Rotation
+    if (earthRef.current) {
+      earthRef.current.rotation.y += 0.0005;
     }
   });
 
+  const handlePointerMove = (e) => {
+    if (e.instanceId !== undefined) {
+       const hovered = satRecs.find(r => r.index === e.instanceId);
+       if (hovered) {
+           setHoveredSatName(hovered.sat.name);
+           setTooltipPos({ x: e.clientX, y: e.clientY });
+       }
+    }
+  };
+
+  const handlePointerOut = () => {
+    setHoveredSatName(null);
+  };
+
+  const handleClick = (e) => {
+    if (e.instanceId !== undefined) {
+       const clicked = satRecs.find(r => r.index === e.instanceId);
+       if (clicked) {
+           onSelectSatellite(clicked.sat);
+       }
+    }
+  };
+
   return (
     <group>
-      <ambientLight intensity={0.15} />
-      <directionalLight position={[50, 20, 30]} intensity={2.5} />
-      
-      <mesh ref={earthRef}>
-        <sphereGeometry args={[EARTH_RADIUS * SCALE_FACTOR, 64, 64]} />
-        <meshStandardMaterial map={earthTexture} roughness={0.6} metalness={0.1} />
+      <ambientLight intensity={0.2} />
+      <directionalLight position={[15, 10, -10]} intensity={2} />
+
+      <Sphere ref={earthRef} args={[EARTH_RADIUS, 64, 64]}>
+        <meshStandardMaterial 
+          map={earthTexture} 
+          roughness={0.8}
+        />
+      </Sphere>
+
+      {/* raycast={() => null} prevents the ring from intercepting your mouse clicks */}
+      <mesh ref={targetRingRef} visible={false} raycast={() => null}>
+        <torusGeometry args={[0.2, 0.02, 16, 32]} />
+        <meshBasicMaterial color="#FF3366" transparent opacity={0.9} />
       </mesh>
 
-      <mesh ref={reticleRef} visible={false}>
-        <torusGeometry args={[0.1, 0.01, 16, 32]} />
-        <meshBasicMaterial color="#FF3366" toneMapped={false} />
-      </mesh>
-
-      <instancedMesh 
-        ref={meshRef} 
-        args={[null, null, satrecs.length]}
-        onClick={(e) => {
-          e.stopPropagation();
-          onSelectSatellite(tleData[e.instanceId]);
-        }}
+      <instancedMesh
+        ref={meshRef}
+        args={[null, null, tleData.length]}
+        onPointerMove={handlePointerMove}
+        onPointerOut={handlePointerOut}
+        onClick={handleClick}
       >
-        <sphereGeometry args={[0.04, 8, 8]} />
-        <meshBasicMaterial vertexColors={true} toneMapped={false} />
+        <sphereGeometry args={[0.06, 8, 8]} />
+        <meshBasicMaterial toneMapped={false} />
       </instancedMesh>
     </group>
   );

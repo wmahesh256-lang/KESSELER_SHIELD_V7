@@ -1,4 +1,4 @@
- import React, { useEffect, useState, useMemo, Suspense } from 'react';
+import React, { useEffect, useState, useMemo, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
@@ -6,47 +6,18 @@ import * as satellite from 'satellite.js';
 import Globe from './Globe';
 
 const OPERATOR_GROUPS = {
-  'CMS': 'ISRO',
-  'GSAT': 'ISRO',
-  'INSAT': 'ISRO',
-  'IRNSS': 'ISRO',
-  'MICROSAT': 'ISRO',
-  'CARTOSAT': 'ISRO',
-  'REESAT': 'ISRO',
-  'OCEANSAT': 'ISRO',
-  'RESOURCESAT': 'ISRO',
-  'FLOCK': 'PLANET_LABS',
-  'SKYSAT': 'PLANET_LABS',
-  'LEMUR': 'SPIRE',
-  'STARLINK': 'SPACEX',
-  'ONEWEB': 'ONEWEB',
-  'ISS': 'ISS_STATION',
-  'POISK': 'ISS_STATION',
-  'ZARYA': 'ISS_STATION',
-  'ZVEZDA': 'ISS_STATION',
-  'NAUKA': 'ISS_STATION',
-  'SOYUZ': 'ISS_STATION',
-  'PROGRESS': 'ISS_STATION',
-  'DRAGON': 'ISS_STATION',
-  'CYGNUS': 'ISS_STATION',
-  'CSS': 'TIANGONG_STATION',
-  'TIANHE': 'TIANGONG_STATION',
-  'WENTIAN': 'TIANGONG_STATION',
-  'MENGTIAN': 'TIANGONG_STATION',
-  'SHENZHOU': 'TIANGONG_STATION',
-  'TIANZHOU': 'TIANGONG_STATION',
-  'AQUA': 'A_TRAIN',
-  'AURA': 'A_TRAIN',
-  'CLOUDSAT': 'A_TRAIN',
-  'CALIPSO': 'A_TRAIN',
-  'OCO': 'A_TRAIN',
-  'GCOM': 'A_TRAIN',
-  'TERRASAR': 'DLR_TWIN_MISSION',
-  'TANDEM': 'DLR_TWIN_MISSION',
-  'NAVSTAR': 'US_GPS',
-  'GALILEO': 'EU_GALILEO',
-  'BEIDOU': 'CN_BEIDOU',
-  'COSMOS': 'RU_GLONASS'
+  'CMS': 'ISRO', 'GSAT': 'ISRO', 'INSAT': 'ISRO', 'IRNSS': 'ISRO', 'MICROSAT': 'ISRO',
+  'CARTOSAT': 'ISRO', 'REESAT': 'ISRO', 'OCEANSAT': 'ISRO', 'RESOURCESAT': 'ISRO',
+  'FLOCK': 'PLANET_LABS', 'SKYSAT': 'PLANET_LABS', 'LEMUR': 'SPIRE',
+  'STARLINK': 'SPACEX', 'ONEWEB': 'ONEWEB',
+  'ISS': 'ISS_STATION', 'POISK': 'ISS_STATION', 'ZARYA': 'ISS_STATION', 'ZVEZDA': 'ISS_STATION',
+  'NAUKA': 'ISS_STATION', 'SOYUZ': 'ISS_STATION', 'PROGRESS': 'ISS_STATION', 'DRAGON': 'ISS_STATION',
+  'CYGNUS': 'ISS_STATION', 'CSS': 'TIANGONG_STATION', 'TIANHE': 'TIANGONG_STATION',
+  'WENTIAN': 'TIANGONG_STATION', 'MENGTIAN': 'TIANGONG_STATION', 'SHENZHOU': 'TIANGONG_STATION',
+  'TIANZHOU': 'TIANGONG_STATION', 'AQUA': 'A_TRAIN', 'AURA': 'A_TRAIN', 'CLOUDSAT': 'A_TRAIN',
+  'CALIPSO': 'A_TRAIN', 'OCO': 'A_TRAIN', 'GCOM': 'A_TRAIN', 'TERRASAR': 'DLR_TWIN_MISSION',
+  'TANDEM': 'DLR_TWIN_MISSION', 'NAVSTAR': 'US_GPS', 'GALILEO': 'EU_GALILEO',
+  'BEIDOU': 'CN_BEIDOU', 'COSMOS': 'RU_GLONASS'
 };
 
 // ---------------------------------------------------------
@@ -152,13 +123,11 @@ function GlobalThreatRadar({ catalog }) {
           <div className="space-y-1">
             {criticalThreats.map((t, i) => (
               <div key={i} className={`p-1.5 rounded border flex flex-col gap-1 ${t.isKesslerEvent ? 'bg-[#FF8800]/20 border-[#FF8800]/50' : 'bg-[#FF3366]/10 border-[#FF3366]/30'}`}>
-                
                 {t.isKesslerEvent && (
                   <div className="text-[8px] font-bold text-black bg-[#FF8800] text-center uppercase tracking-widest rounded-sm mb-1 animate-pulse">
                     ⚠️ KESSLER DEBRIS EVENT
                   </div>
                 )}
-                
                 <div className={`flex justify-between items-center text-[9px] ${t.isKesslerEvent ? 'text-[#FF8800]' : 'text-gray-300'}`}>
                   <span className="truncate w-1/2">{t.obj1}</span>
                   <span className="font-bold px-1 text-[10px]">⚔️</span>
@@ -206,11 +175,18 @@ function GlobalThreatRadar({ catalog }) {
 }
 
 // ---------------------------------------------------------
-// LiveTelemetry: Target Analytics
+// LiveTelemetry: Target Analytics & Dynamic CAM Simulator
 // ---------------------------------------------------------
 function LiveTelemetry({ sat, isTracking, setTrackingMode }) {
   const [metrics, setMetrics] = useState({ alt: '0', vel: '0', lat: '0', lng: '0' });
-  const [riskAssessment, setRiskAssessment] = useState({ level: 'CALCULATING', color: 'text-gray-500', msg: '' });
+  const [baseRisk, setBaseRisk] = useState({ level: 'CALCULATING...', color: 'text-gray-500', msg: '' });
+
+  // Pitch Demo States (Controlled by Button)
+  const [isScanning, setIsScanning] = useState(false);
+  const [cdm, setCdm] = useState(null);
+  const [tcaString, setTcaString] = useState('--h --m --s');
+  const [calculatingCam, setCalculatingCam] = useState(false);
+  const [calculatedCam, setCalculatedCam] = useState(null);
 
   const satrec = useMemo(() => satellite.twoline2satrec(sat.tle1, sat.tle2), [sat]);
   const inclination = (satrec.inclo * (180 / Math.PI)).toFixed(2);
@@ -218,6 +194,31 @@ function LiveTelemetry({ sat, isTracking, setTrackingMode }) {
   const period = ((2 * Math.PI) / satrec.no).toFixed(2);
   const revsPerDay = (satrec.no * (1440 / (2 * Math.PI))).toFixed(2);
 
+  // Reset demo states when a new satellite is selected
+  useEffect(() => {
+    setCdm(null);
+    setCalculatedCam(null);
+    setIsScanning(false);
+  }, [sat]);
+
+  // TCA Live Countdown Timer
+  useEffect(() => {
+    if (!cdm) return;
+    const interval = setInterval(() => {
+      const diff = cdm.tcaTime - Date.now();
+      if (diff <= 0) {
+        setTcaString('IMPACT TIME PASSED');
+        return;
+      }
+      const h = Math.floor(diff / 3600000).toString().padStart(2, '0');
+      const m = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
+      const s = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+      setTcaString(`T-${h}h ${m}m ${s}s`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cdm]);
+
+  // Live Position Telemetry & Base Risk Calculation
   useEffect(() => {
     const interval = setInterval(() => {
       const now = new Date();
@@ -235,18 +236,57 @@ function LiveTelemetry({ sat, isTracking, setTrackingMode }) {
         lng: satellite.degreesLong(geodetic.longitude).toFixed(2)
       });
 
+      // Genuine background risk assessment based on altitude
       if (alt < 500) {
-        setRiskAssessment({ level: 'LOW', color: 'text-[#00FFCC]', msg: 'Atmospheric drag prevents long-term debris buildup. Safe orbit.' });
+        setBaseRisk({ level: 'LOW', color: 'text-[#00FFCC]', msg: 'Atmospheric drag limits debris buildup. Safe orbit.' });
       } else if (alt >= 500 && alt <= 1000) {
-        setRiskAssessment({ level: 'CRITICAL', color: 'text-[#FF3366]', msg: 'Peak spatial density zone. Kessler Syndrome risk is extreme.' });
+        setBaseRisk({ level: 'ELEVATED', color: 'text-[#FFB300]', msg: 'Peak spatial density zone. Collision risk is elevated.' });
       } else if (alt > 1000 && alt < 2000) {
-        setRiskAssessment({ level: 'ELEVATED', color: 'text-[#FFB300]', msg: 'Upper LEO. Debris persists for centuries.' });
+        setBaseRisk({ level: 'MODERATE', color: 'text-yellow-400', msg: 'Upper LEO. Debris persists for centuries.' });
       } else {
-        setRiskAssessment({ level: 'STABLE', color: 'text-gray-300', msg: 'MEO/GEO orbit. Low spatial density, structurally monitored.' });
+        setBaseRisk({ level: 'STABLE', color: 'text-gray-300', msg: 'MEO/GEO orbit. Low spatial density.' });
       }
     }, 1000);
     return () => clearInterval(interval);
   }, [satrec]);
+
+  // Manual Trigger for Pitch Demo
+  const handleRunProximityScan = () => {
+    setIsScanning(true);
+    setTimeout(() => {
+      setIsScanning(false);
+      const futureMs = Date.now() + (Math.floor(Math.random() * 75) + 45) * 60000;
+      setCdm({
+        chaser: `DEBRIS (NORAD ${Math.floor(Math.random() * 10000) + 30000})`,
+        missDistance: (Math.random() * 0.3 + 0.05).toFixed(3), 
+        tcaTime: futureMs,
+        probability: `1.${Math.floor(Math.random() * 9)} × 10⁻³`
+      });
+    }, 1500);
+  };
+
+  const handleComputeCAM = () => {
+    setCalculatingCam(true);
+    setTimeout(() => {
+      const safeRadialDistanceMeters = 5000; 
+      const meanMotionRadSec = satrec.no / 60; 
+      const requiredDeltaV = (safeRadialDistanceMeters * meanMotionRadSec) / 2;
+
+      setCalculatedCam({
+        dV: requiredDeltaV.toFixed(3),
+        vector: '+Along-Track (Prograde)',
+        execution: new Date(Date.now() + 15 * 60000).toLocaleTimeString('en-US', { hour12: false, timeZone: 'UTC' }) + ' UTC'
+      });
+      setCalculatingCam(false);
+    }, 1200);
+  };
+
+  // Determine which risk state to display
+  const currentRisk = isScanning 
+    ? { level: 'SCANNING PROXIMITY...', color: 'text-yellow-400 animate-pulse', msg: 'Running SGP4 batch intersection tests...' }
+    : cdm 
+      ? { level: 'CRITICAL', color: 'text-[#FF3366]', msg: 'Imminent collision trajectory detected. Evasive action required.' }
+      : baseRisk;
 
   return (
     <div className="space-y-4">
@@ -258,16 +298,61 @@ function LiveTelemetry({ sat, isTracking, setTrackingMode }) {
       </div>
 
       <div className="bg-black p-3 rounded border border-gray-800">
-        <label className="text-[10px] text-gray-500 block mb-2 border-b border-gray-800 pb-1">ORBITAL THREAT LEVEL</label>
-        <div className="py-1">
-          <p className="text-xs text-gray-300">STATUS: <span className={`font-bold ${riskAssessment.color}`}>{riskAssessment.level}</span></p>
-          <p className="text-[9px] text-gray-500 mt-1">{riskAssessment.msg}</p>
+        <div className="flex justify-between items-center mb-2 border-b border-gray-800 pb-1">
+          <label className="text-[10px] text-gray-500 block">ORBITAL THREAT LEVEL</label>
+          {/* Manual Trigger Button for the Pitch */}
+          {!cdm && !isScanning && (
+            <button 
+              onClick={handleRunProximityScan}
+              className="text-[8px] bg-gray-800 hover:bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded font-bold transition-colors"
+            >
+              [ RUN PROXIMITY SCAN ]
+            </button>
+          )}
         </div>
+        
+        <div className="py-1">
+          <p className="text-xs text-gray-300">STATUS: <span className={`font-bold ${currentRisk.color}`}>{currentRisk.level}</span></p>
+          <p className="text-[9px] text-gray-500 mt-1">{currentRisk.msg}</p>
+        </div>
+
+        {/* Dynamic Collision Warning UI */}
+        {cdm && (
+          <div className="mt-3 border-t border-[#FF3366]/30 pt-3 animate-in fade-in">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-[9px] font-bold text-[#FF3366] tracking-wider">CONJUNCTION DATA MESSAGE</span>
+              <span className="text-[8px] bg-[#FF3366] text-black px-1 font-bold animate-pulse">CRITICAL</span>
+            </div>
+            <div className="text-[9px] space-y-1 font-mono bg-[#FF3366]/5 p-2 border border-[#FF3366]/20 rounded mb-3">
+              <div className="flex justify-between"><span className="text-gray-500">CHASER DEBRIS:</span><span className="text-[#FF3366] font-bold">{cdm.chaser}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">MISS DISTANCE:</span><span className="text-white font-bold">{cdm.missDistance} km</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">PROBABILITY (Pc):</span><span className="text-white font-bold">{cdm.probability}</span></div>
+              <div className="flex justify-between pt-1 border-t border-[#FF3366]/20 mt-1"><span className="text-gray-500">TIME TO IMPACT:</span><span className="text-yellow-400 font-bold text-[10px]">{tcaString}</span></div>
+            </div>
+
+            {!calculatedCam ? (
+              <button onClick={handleComputeCAM} disabled={calculatingCam} className="w-full py-1.5 bg-[#FF3366] hover:bg-[#ff1a53] text-black font-bold text-[9px] uppercase tracking-wider rounded-sm disabled:opacity-50 transition-colors">
+                {calculatingCam ? 'Propagating SGP4 Riccati...' : 'Compute Evasive Maneuver (CAM)'}
+              </button>
+            ) : (
+              <div className="p-2 bg-[#00FFCC]/10 border border-[#00FFCC]/50 rounded space-y-1.5 animate-in fade-in slide-in-from-top-2">
+                <div className="text-[9px] font-bold text-[#00FFCC] flex justify-between border-b border-[#00FFCC]/20 pb-1"><span>RECOMMENDED THRUST BURN</span><span className="bg-[#00FFCC] text-black px-1">OPTIMIZED</span></div>
+                <div className="text-[8px] font-mono text-gray-300 space-y-1">
+                  <div className="flex justify-between"><span>REQUIRED DELTA-V:</span><span className="text-white font-bold">{calculatedCam.dV} m/s</span></div>
+                  <div className="flex justify-between"><span>BURN VECTOR:</span><span className="text-[#00FFCC] font-bold">{calculatedCam.vector}</span></div>
+                  <div className="flex justify-between"><span>EXECUTION EPOCH:</span><span className="text-yellow-400 font-bold">{calculatedCam.execution}</span></div>
+                  <div className="flex justify-between text-gray-500 pt-1 border-t border-gray-700"><span>POST-BURN Pc:</span><span className="text-gray-400 font-bold">&lt; 1.0 × 10⁻⁶</span></div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-800">
           <button 
             onClick={() => setTrackingMode(!isTracking)}
             className={`flex-1 text-xs py-1.5 rounded font-bold uppercase transition-colors ${
-              isTracking ? 'bg-[#FF3366] text-black' : 'bg-[#00FFCC] text-black'
+              isTracking ? 'bg-[#00FFCC]/20 text-[#00FFCC] border border-[#00FFCC]' : 'bg-[#00FFCC] text-black'
             }`}
           >
             {isTracking ? 'Unlock Camera' : 'Track Orbit'}
@@ -276,43 +361,19 @@ function LiveTelemetry({ sat, isTracking, setTrackingMode }) {
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <div className="bg-black p-2 rounded border border-gray-800">
-          <label className="text-[9px] text-gray-500 block mb-1">ALTITUDE</label>
-          <span className="text-sm text-white">{metrics.alt} km</span>
-        </div>
-        <div className="bg-black p-2 rounded border border-gray-800">
-          <label className="text-[9px] text-gray-500 block mb-1">VELOCITY</label>
-          <span className="text-sm text-white">{metrics.vel} km/s</span>
-        </div>
-        <div className="bg-black p-2 rounded border border-gray-800">
-          <label className="text-[9px] text-gray-500 block mb-1">LATITUDE</label>
-          <span className="text-sm text-white">{metrics.lat}°</span>
-        </div>
-        <div className="bg-black p-2 rounded border border-gray-800">
-          <label className="text-[9px] text-gray-500 block mb-1">LONGITUDE</label>
-          <span className="text-sm text-white">{metrics.lng}°</span>
-        </div>
+        <div className="bg-black p-2 rounded border border-gray-800"><label className="text-[9px] text-gray-500 block mb-1">ALTITUDE</label><span className="text-sm text-white">{metrics.alt} km</span></div>
+        <div className="bg-black p-2 rounded border border-gray-800"><label className="text-[9px] text-gray-500 block mb-1">VELOCITY</label><span className="text-sm text-white">{metrics.vel} km/s</span></div>
+        <div className="bg-black p-2 rounded border border-gray-800"><label className="text-[9px] text-gray-500 block mb-1">LATITUDE</label><span className="text-sm text-white">{metrics.lat}°</span></div>
+        <div className="bg-black p-2 rounded border border-gray-800"><label className="text-[9px] text-gray-500 block mb-1">LONGITUDE</label><span className="text-sm text-white">{metrics.lng}°</span></div>
       </div>
 
       <div className="bg-black p-3 rounded border border-gray-800 overflow-hidden">
         <label className="text-[10px] text-gray-500 block mb-2 border-b border-gray-800 pb-1">ORBITAL MECHANICS</label>
         <div className="grid grid-cols-2 gap-y-3 mt-2">
-          <div>
-            <label className="text-[8px] text-gray-500 block">INCLINATION</label>
-            <span className="text-xs text-gray-300">{inclination}°</span>
-          </div>
-          <div>
-            <label className="text-[8px] text-gray-500 block">ECCENTRICITY</label>
-            <span className="text-xs text-gray-300">{eccentricity}</span>
-          </div>
-          <div>
-            <label className="text-[8px] text-gray-500 block">PERIOD</label>
-            <span className="text-xs text-gray-300">{period} min</span>
-          </div>
-          <div>
-            <label className="text-[8px] text-gray-500 block">MEAN MOTION</label>
-            <span className="text-xs text-gray-300">{revsPerDay} rev/day</span>
-          </div>
+          <div><label className="text-[8px] text-gray-500 block">INCLINATION</label><span className="text-xs text-gray-300">{inclination}°</span></div>
+          <div><label className="text-[8px] text-gray-500 block">ECCENTRICITY</label><span className="text-xs text-gray-300">{eccentricity}</span></div>
+          <div><label className="text-[8px] text-gray-500 block">PERIOD</label><span className="text-xs text-gray-300">{period} min</span></div>
+          <div><label className="text-[8px] text-gray-500 block">MEAN MOTION</label><span className="text-xs text-gray-300">{revsPerDay} rev/day</span></div>
         </div>
       </div>
       
@@ -336,6 +397,12 @@ export default function App() {
   const [hoveredSatName, setHoveredSatName] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [catalogLimit, setCatalogLimit] = useState(5000);
+  
+  // Presentation Filter for Orbits
+  const [orbitFilter, setOrbitFilter] = useState('ALL');
+  
+  // Toggle visibility of the Target Acquisition panel
+  const [showTargetPanel, setShowTargetPanel] = useState(true);
 
   useEffect(() => {
     fetch(`http://localhost:8000/catalog?limit=${catalogLimit}`)
@@ -351,16 +418,31 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // CRITICAL MEMORY FIX: Memoize the filtered array to prevent infinite re-renders on mouse hover
   const filteredCatalog = useMemo(() => {
-    return catalog.filter(sat => 
-      sat.name.toLowerCase().includes(activeSearch.toLowerCase())
-    );
-  }, [catalog, activeSearch]);
+    return catalog.filter(sat => {
+      const matchesSearch = sat.name.toLowerCase().includes(activeSearch.toLowerCase());
+      if (!matchesSearch) return false;
+
+      if (orbitFilter === 'ALL') return true;
+
+      try {
+        const rec = satellite.twoline2satrec(sat.tle1, sat.tle2);
+        const revsPerDay = rec.no * (1440 / (2 * Math.PI));
+        
+        if (orbitFilter === 'LEO') return revsPerDay >= 11.25;
+        if (orbitFilter === 'MEO') return revsPerDay > 1.5 && revsPerDay < 11.25;
+        if (orbitFilter === 'GEO') return revsPerDay <= 1.5;
+      } catch (e) {
+        return false; 
+      }
+      return true;
+    });
+  }, [catalog, activeSearch, orbitFilter]);
 
   const handleSelectSatellite = (sat) => {
     setSelectedSat(sat);
     setTrackingMode(false); 
+    setShowTargetPanel(true); // Automatically expand the panel if you click a satellite
   };
 
   const handleClearTarget = () => {
@@ -453,6 +535,33 @@ export default function App() {
           </button>
         </div>
 
+        <div className="mt-2 flex gap-1 pointer-events-auto">
+          <button 
+            onClick={() => setOrbitFilter('ALL')} 
+            className={`flex-1 py-1 text-[9px] font-bold tracking-widest rounded border transition-colors ${orbitFilter === 'ALL' ? 'bg-gray-800 text-white border-gray-500' : 'bg-black text-gray-500 border-gray-800 hover:text-white'}`}
+          >
+            ALL
+          </button>
+          <button 
+            onClick={() => setOrbitFilter('LEO')} 
+            className={`flex-1 py-1 text-[9px] font-bold tracking-widest rounded border transition-colors ${orbitFilter === 'LEO' ? 'bg-[#00FFCC]/20 text-[#00FFCC] border-[#00FFCC]' : 'bg-black text-gray-500 border-gray-800 hover:border-[#00FFCC] hover:text-[#00FFCC]'}`}
+          >
+            LEO
+          </button>
+          <button 
+            onClick={() => setOrbitFilter('MEO')} 
+            className={`flex-1 py-1 text-[9px] font-bold tracking-widest rounded border transition-colors ${orbitFilter === 'MEO' ? 'bg-[#FF8800]/20 text-[#FF8800] border-[#FF8800]' : 'bg-black text-gray-500 border-gray-800 hover:border-[#FF8800] hover:text-[#FF8800]'}`}
+          >
+            MEO
+          </button>
+          <button 
+            onClick={() => setOrbitFilter('GEO')} 
+            className={`flex-1 py-1 text-[9px] font-bold tracking-widest rounded border transition-colors ${orbitFilter === 'GEO' ? 'bg-[#B366FF]/20 text-[#B366FF] border-[#B366FF]' : 'bg-black text-gray-500 border-gray-800 hover:border-[#B366FF] hover:text-[#B366FF]'}`}
+          >
+            GEO
+          </button>
+        </div>
+
         <div className="mt-4 pointer-events-auto">
           <input 
             type="text" 
@@ -468,8 +577,16 @@ export default function App() {
         
         <div>
           <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-3">
-            <h2 className="text-sm font-bold text-gray-400">TARGET ACQUISITION</h2>
-            {selectedSat && (
+            <div className="flex items-center gap-3">
+              <h2 className="text-sm font-bold text-gray-400">TARGET ACQUISITION</h2>
+              <button 
+                onClick={() => setShowTargetPanel(!showTargetPanel)}
+                className="text-[9px] bg-gray-800/80 hover:bg-gray-700 text-gray-400 px-2 py-0.5 rounded pointer-events-auto transition-colors font-bold"
+              >
+                {showTargetPanel ? 'HIDE' : 'SHOW'}
+              </button>
+            </div>
+            {selectedSat && showTargetPanel && (
               <button 
                 onClick={handleClearTarget}
                 className="text-[10px] text-gray-500 hover:text-[#FF3366] transition-colors uppercase font-bold pointer-events-auto"
@@ -479,12 +596,14 @@ export default function App() {
             )}
           </div>
           
-          {selectedSat ? (
-            <LiveTelemetry sat={selectedSat} isTracking={trackingMode} setTrackingMode={setTrackingMode} />
-          ) : (
-            <div className="h-24 flex items-center justify-center border border-dashed border-gray-700 rounded text-gray-600 text-xs">
-              CLICK A SATELLITE TO LOCK TARGET
-            </div>
+          {showTargetPanel && (
+            selectedSat ? (
+              <LiveTelemetry sat={selectedSat} isTracking={trackingMode} setTrackingMode={setTrackingMode} />
+            ) : (
+              <div className="h-24 flex items-center justify-center border border-dashed border-gray-700 rounded text-gray-600 text-xs">
+                CLICK A SATELLITE TO LOCK TARGET
+              </div>
+            )
           )}
         </div>
 

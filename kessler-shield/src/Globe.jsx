@@ -31,7 +31,7 @@ export default function Globe({
   useEffect(() => {
     if (!meshRef.current || !tleData || tleData.length === 0) return;
 
-    // CRITICAL FIX: Override the hidden Raycaster hitbox to wrap the entire orbital system
+    // Expand raycaster bounding sphere so clicks register across the whole orbit
     if (meshRef.current.geometry) {
       meshRef.current.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 100);
     }
@@ -43,15 +43,24 @@ export default function Globe({
         recs.push({ sat, rec, index: i });
         
         const revsPerDay = rec.no * (1440 / (2 * Math.PI));
+        const satName = (sat.name || '').toUpperCase();
 
-        if (sat.name.includes('DEB')) {
-          tempColor.set('#FF8800'); 
+        const isDebris = 
+          satName.includes('DEB') || 
+          satName.includes('R/B') || 
+          satName.includes('FENGYUN') || 
+          satName.includes('COSMOS') || 
+          satName.includes('IRIDIUM') ||
+          satName.includes('FRAGMENT');
+
+        if (isDebris) {
+          tempColor.set('#FF0000'); // Debris & Rocket Bodies: Bright Red
         } else if (revsPerDay >= 11.25) {
-          tempColor.set('#00FFCC'); 
+          tempColor.set('#00FFCC'); // LEO: Cyan
         } else if (revsPerDay > 1.5) {
-          tempColor.set('#B366FF'); 
+          tempColor.set('#FF8800'); // MEO: Orange
         } else {
-          tempColor.set('#FFFFAA'); 
+          tempColor.set('#B366FF'); // GEO: Purple
         }
         
         meshRef.current.setColorAt(i, tempColor);
@@ -68,7 +77,7 @@ export default function Globe({
     const now = new Date();
     const frameId = Math.floor(clock.getElapsedTime() * 60) % 4;
     
-    // 1. Time-Sliced Background Swarm
+    // 1. Time-Sliced Background Swarm (60 FPS performance)
     for (let i = frameId; i < satRecs.length; i += 4) {
       const { rec, index } = satRecs[i];
       try {
@@ -87,7 +96,7 @@ export default function Globe({
       } catch (e) {}
     }
 
-    // 2. Continuous 60 FPS Target Lock
+    // 2. 60 FPS Target Lock & Gyroscopic Pink Ring
     if (selectedSat) {
       const target = satRecs.find(r => r.sat.name === selectedSat.name);
       if (target) {
@@ -100,11 +109,13 @@ export default function Globe({
             
             targetVec.set(x, z, -y);
             
+            // Keep target satellite position updated every frame
             tempObject.position.set(x, z, -y);
             tempObject.scale.set(1, 1, 1);
             tempObject.updateMatrix();
             meshRef.current.setMatrixAt(target.index, tempObject.matrix);
             
+            // Gyroscopic rotating pink ring
             if (targetRingRef.current) {
               targetRingRef.current.position.copy(targetVec);
               targetRingRef.current.rotation.x -= 0.02;
@@ -112,8 +123,9 @@ export default function Globe({
               targetRingRef.current.visible = true;
             }
             
+            // Smooth zoom-in camera tracking
             if (trackingMode) {
-              camera.position.lerp(targetVec.clone().multiplyScalar(1.6), 0.08);
+              camera.position.lerp(targetVec.clone().multiplyScalar(1.3), 0.06);
               camera.lookAt(0, 0, 0);
             }
           }
@@ -125,7 +137,7 @@ export default function Globe({
     
     meshRef.current.instanceMatrix.needsUpdate = true;
 
-    // 3. Independent Earth Rotation
+    // 3. Continuous Earth Rotation
     if (earthRef.current) {
       earthRef.current.rotation.y += 0.0005;
     }
@@ -159,6 +171,7 @@ export default function Globe({
       <ambientLight intensity={0.2} />
       <directionalLight position={[15, 10, -10]} intensity={2} />
 
+      {/* Earth Sphere */}
       <Sphere ref={earthRef} args={[EARTH_RADIUS, 64, 64]}>
         <meshStandardMaterial 
           map={earthTexture} 
@@ -166,22 +179,27 @@ export default function Globe({
         />
       </Sphere>
 
-      {/* raycast={() => null} prevents the ring from intercepting your mouse clicks */}
+      {/* Rotating 3D Neon Pink Target Ring */}
       <mesh ref={targetRingRef} visible={false} raycast={() => null}>
-        <torusGeometry args={[0.2, 0.02, 16, 32]} />
-        <meshBasicMaterial color="#FF3366" transparent opacity={0.9} />
+        <torusGeometry args={[0.22, 0.025, 16, 32]} />
+        <meshBasicMaterial color="#FF3366" toneMapped={false} />
       </mesh>
 
-      <instancedMesh
-        ref={meshRef}
-        args={[null, null, tleData.length]}
-        onPointerMove={handlePointerMove}
-        onPointerOut={handlePointerOut}
-        onClick={handleClick}
-      >
-        <sphereGeometry args={[0.06, 8, 8]} />
-        <meshBasicMaterial toneMapped={false} />
-      </instancedMesh>
+      {/* Satellites Swarm */}
+      {tleData && tleData.length > 0 && (
+        <instancedMesh
+          ref={meshRef}
+          key={tleData.length}
+          args={[null, null, tleData.length]}
+          onPointerMove={handlePointerMove}
+          onPointerOut={handlePointerOut}
+          onClick={handleClick}
+        >
+          <sphereGeometry args={[0.06, 8, 8]} />
+          <meshBasicMaterial toneMapped={false} />
+        </instancedMesh>
+      )}
     </group>
   );
 }
+

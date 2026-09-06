@@ -70,4 +70,4 @@ Kessler Shield includes two rendering modes to accommodate different hardware pr
 
 ## Acknowledgements
 
-Designed and engineered by **Team SynapTech**(is what i would say if my team helped me,but I did this entire thing on my own) at the College of Engineering, Guindy. Theoretical foundation based on the 1978 models of Donald J. Kessler and NORAD Spacetrack Report No. 3.
+Designed and engineered by **Team SynapTech** at the College of Engineering, Guindy. Theoretical foundation based on the 1978 models of Donald J. Kessler and NORAD Spacetrack Report No. 3.
